@@ -32,17 +32,19 @@ A real-time translation API service for church audio. The system captures audio 
 ## Architecture Flow
 
 ```text
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│ Mixing Board│────▶│   FFmpeg    │────▶│  pending/   │
+│   (Audio)   │     │ (chunking)  │     │  (files)    │
+└─────────────┘     └─────────────┘     └──────┬──────┘
+                                               │ File Watcher
+                                               ▼
 ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│ Mixing Board│────▶│ Audio Chunk │────▶│  Groq API   │────▶│   English   │
-│   (Audio)   │     │  (FFmpeg)   │     │ (Transcribe)│     │    Text     │
-└─────────────┘     └─────────────┘     └─────────────┘     └──────┬──────┘
-                                                                   │
-                                                                   ▼
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Client    │◀────│  Response   │◀────│ Groq Qwen   │◀────│  Translate  │
-│  (Chinese)  │     │   (Text)    │     │    32B      │     │  to Chinese │
+│   Client    │◀────│  Groq Qwen  │◀────│  Groq API   │◀────│ processing/ │
+│  (Chinese)  │     │ (Translate) │     │ (Transcribe)│     │  (files)    │
 └─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
 ```
+
+**Pipeline:** FFmpeg writes audio chunks to disk → File watcher detects new files → Transcription worker processes → Translation → Client delivery
 
 ---
 
@@ -67,7 +69,7 @@ Each epic has its own tracking file in `docs/epics/`. Use task numbers to refere
 | Epic | Name | Description | File |
 |------|------|-------------|------|
 | 1 | [Project Setup & Infrastructure](epics/epic-1-setup.md) | Docker environment, MongoDB, project structure | `epic-1-setup.md` |
-| 2 | [Audio Processing Pipeline](epics/epic-2-audio.md) | Audio input, FFmpeg chunking, temporary storage | `epic-2-audio.md` |
+| 2 | [Audio Processing Pipeline](epics/epic-2-audio.md) | Async file-based pipeline, FFmpeg chunking, file watcher | `epic-2-audio.md` |
 | 3 | [Transcription Service](epics/epic-3-transcription.md) | Groq API integration for speech-to-text | `epic-3-transcription.md` |
 | 4 | [Translation Service](epics/epic-4-translation.md) | Groq Qwen 32B for English→Chinese | `epic-4-translation.md` |
 | 5 | [Client API Endpoints](epics/epic-5-api.md) | REST endpoints, sessions, real-time delivery | `epic-5-api.md` |
@@ -86,9 +88,14 @@ Establish the development environment with Docker containers for both the Flask 
 
 ### Epic 2: Audio Processing Pipeline
 
-Handle audio input from the church mixing board. Use FFmpeg to slice the continuous audio stream into manageable chunks suitable for API processing. Define audio format, chunk duration, and encoding settings.
+Async file-based audio pipeline. FFmpeg captures audio and writes chunks directly to a watched directory. A file watcher service detects new files and queues them for transcription. No HTTP endpoint required—simpler, more reliable, and easier to debug.
 
-**Expected Outcome:** System can receive audio input and produce properly formatted chunks ready for transcription API.
+**Platforms:**
+
+- **Development (Arch Linux):** Laptop mic via PulseAudio
+- **Production (Windows):** Mixing board via DirectShow
+
+**Expected Outcome:** System continuously captures audio, chunks it to disk, and processes via file system events.
 
 ### Epic 3: Transcription Service (Groq API)
 
@@ -158,6 +165,8 @@ docker-compose down
 | D2 | Use Groq Qwen 32B for English→Chinese | Better translation quality from English | 2024-12-10 |
 | D3 | No authentication required | Simplicity for initial version | 2024-12-10 |
 | D4 | Split PRD into epic files | Easier tracking and management | 2024-12-10 |
+| D5 | Async file-based audio pipeline (no HTTP endpoint) | Simpler, more reliable, easier to debug; FFmpeg writes directly to disk | 2024-12-10 |
+| D6 | Cross-platform support (Linux dev, Windows prod) | Dev on Arch Linux with laptop mic, deploy on Windows with mixing board | 2024-12-10 |
 
 ---
 
