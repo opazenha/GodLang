@@ -144,8 +144,8 @@ ffmpeg -list_devices true -f dshow -i dummy
 - [x] **2.3.1** Create directory structure on startup
 - [x] **2.3.2** Implement atomic file moves between directories
 - [x] **2.3.3** Add TTL-based cleanup (delete files > 30 min old)
-- [ ] **2.3.4** Implement disk space monitoring and alerts
-- [-] **2.3.5** Create manifest.json for optional metadata tracking (not needed)
+- [ ] **2.3.4** Implement disk space monitoring and alerts (optional optimization for later)
+- [-] **2.3.5** Create manifest.json for optional metadata tracking (no longer needed)
 
 > 💬 Notes:
 >
