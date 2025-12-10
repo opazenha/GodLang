@@ -1,15 +1,47 @@
 services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "7770:7770"
+    volumes:
+      # Mount source code for hot-reload
+      - ./app:/app/app:ro
+      - ./run.py:/app/run.py:ro
+    environment:
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
+      - FLASK_PORT=7770
+      - MONGO_URI=mongodb://mongodb:27017/
+      - MONGO_DB_NAME=godlang
+      - GROQ_API_KEY=${GROQ_API_KEY}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - godlang_network
+    # Hot-reload: use Flask's built-in reloader
+    command: python -c "from run import app; app.run(host='0.0.0.0', port=7770, debug=True, use_reloader=True)"
+
   mongodb:
-    image: mongo:latest
+    image: mongo:7.0
     ports:
       - "27017:27017"
     volumes:
       - mongo_data:/data/db
+      - ./docker/mongo-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - godlang_network
+
+networks:
+  godlang_network:
+    driver: bridge
 
 volumes:
   mongo_data:
