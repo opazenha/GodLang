@@ -78,15 +78,16 @@ Example: `1702200000_001_0.wav`
 
 - [ ] **2.1.1** Create FFmpeg capture script with platform detection
 - [ ] **2.1.2** Configure chunk duration (10 seconds recommended)
-- [ ] **2.1.3** Define audio format: 16kHz mono WAV (Groq compatible)
+- [ ] **2.1.3** Define audio format: 16kHz mono FLAC (Groq compatible)
 - [ ] **2.1.4** Implement graceful start/stop of capture process
 - [ ] **2.1.5** Add device listing utility for both platforms
 
 > 💬 Notes:
 >
-> - Groq Whisper accepts: mp3, mp4, mpeg, mpga, m4a, wav, webm
-> - 16kHz mono WAV is optimal for speech recognition
-> - Max file size: 25MB (10s @ 16kHz mono ≈ 320KB)
+> - Groq Whisper accepts: flac, mp3, mp4, mpeg, mpga, m4a, ogg, wav, webm
+> - 16kHz mono FLAC is optimal (lossless compression, smaller than WAV)
+> - Max file size: 25MB free tier, 100MB dev tier
+> - 10s @ 16kHz mono FLAC ≈ 80-100KB (vs ~320KB for WAV)
 
 ### FFmpeg Commands
 
@@ -94,20 +95,20 @@ Example: `1702200000_001_0.wav`
 
 ```bash
 ffmpeg -f pulse -i default \
-  -ar 16000 -ac 1 \
+  -ar 16000 -ac 1 -c:a flac \
   -f segment -segment_time 10 \
   -strftime 1 \
-  /tmp/godlang/pending/%Y%m%d_%H%M%S_0.wav
+  /tmp/godlang/pending/%Y%m%d_%H%M%S.flac
 ```
 
 **Windows (production - mixing board):**
 
 ```cmd
 ffmpeg -f dshow -i audio="Mixing Board Device Name" ^
-  -ar 16000 -ac 1 ^
+  -ar 16000 -ac 1 -c:a flac ^
   -f segment -segment_time 10 ^
   -strftime 1 ^
-  C:\Temp\godlang\pending\%%Y%%m%%d_%%H%%M%%S_0.wav
+  C:\Temp\godlang\pending\%%Y%%m%%d_%%H%%M%%S.flac
 ```
 
 **List audio devices:**

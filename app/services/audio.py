@@ -189,6 +189,7 @@ class FFmpegCapture:
             "-i", device,
             "-ar", str(AudioConfig.SAMPLE_RATE),
             "-ac", str(AudioConfig.CHANNELS),
+            "-c:a", "flac",  # FLAC codec for lossless compression
             "-f", "segment",
             "-segment_time", str(AudioConfig.CHUNK_DURATION),
             "-strftime", "1",

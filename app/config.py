@@ -16,7 +16,7 @@ class AudioConfig:
     CHUNK_DURATION = int(os.getenv("AUDIO_CHUNK_DURATION", "10"))  # seconds
     SAMPLE_RATE = int(os.getenv("AUDIO_SAMPLE_RATE", "16000"))  # Hz
     CHANNELS = 1  # mono
-    FORMAT = "wav"
+    FORMAT = "flac"  # FLAC for lossless compression (smaller than WAV)
     
     # Retry and cleanup
     MAX_RETRIES = int(os.getenv("AUDIO_MAX_RETRIES", "3"))
