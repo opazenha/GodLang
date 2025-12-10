@@ -18,29 +18,39 @@ Set up pytest for unit and integration testing. Create API documentation and set
 - [ ] **7.1.2** Unit tests for audio processing
 - [ ] **7.1.3** Unit tests for API clients
 - [ ] **7.1.4** Integration tests for full pipeline
-- [ ] **7.1.5** Create mock responses for external APIs
+- [x] **7.1.5** Create mock responses for external APIs (`scripts/test_audio_pipeline.py` has mock transcribe)
 
 > 💬 Notes:
 >
+> - `scripts/test_audio_pipeline.py` provides manual testing with mock transcription
+> - Pytest setup pending
 
 ---
 
 ## 7.2 Documentation
 
 - [ ] **7.2.1** API documentation (endpoints, schemas)
-- [ ] **7.2.2** Setup/installation guide
-- [ ] **7.2.3** Environment variables documentation
+- [x] **7.2.2** Setup/installation guide (`README.md`, `CONTRIBUTING.md`)
+- [x] **7.2.3** Environment variables documentation (`.env.example` with comments)
 
 > 💬 Notes:
 >
+> - `README.md` - Project overview, quick start, architecture
+> - `CONTRIBUTING.md` - Step-by-step setup guide with troubleshooting
+> - `.env.example` - All env vars documented
 
 ---
 
 ## Progress Log
 
-### Session [DATE]
+### Session 2024-12-10
 
-**Focus:**  
-**Completed:**  
-**Blockers:**  
-**Next Steps:**  
+**Focus:** Documentation  
+**Completed:**
+
+- `README.md` with architecture, quick start, project structure
+- `CONTRIBUTING.md` with step-by-step setup guide
+- Mock transcription in test script
+
+**Blockers:** None  
+**Next Steps:** Set up pytest, write unit tests  

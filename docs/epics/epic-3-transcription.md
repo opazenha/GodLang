@@ -20,16 +20,19 @@ Integrate with Groq API to transcribe audio chunks. Leverage Groq's built-in tra
 
 ## 3.1 Groq API Integration
 
-- [ ] **3.1.1** Research Groq API documentation for audio transcription
-- [ ] **3.1.2** Set up Groq API credentials in environment
-- [ ] **3.1.3** Create Groq API client service
-- [ ] **3.1.4** Implement audio-to-English transcription endpoint
-- [ ] **3.1.5** Define Pydantic schema for transcription response
+- [x] **3.1.1** Research Groq API documentation for audio transcription
+- [x] **3.1.2** Set up Groq API credentials in environment (`GROQ_API_KEY` in `config.py`)
+- [x] **3.1.3** Create Groq API client service (`app/services/groq_client.py`)
+- [ ] **3.1.4** Implement audio-to-English transcription function
+- [x] **3.1.5** Define Pydantic schema for transcription response (`TranscriptionModel` in `schemas.py`)
 - [ ] **3.1.6** Add error handling for API failures
-- [ ] **3.1.7** Implement retry logic with exponential backoff
+- [x] **3.1.7** Implement retry logic with exponential backoff (in `AudioPipeline`)
 
 > 💬 Notes:
-> Groq API returns transcription directly in English (translation feature built-in)
+>
+> - Groq API returns transcription directly in English (translation feature built-in)
+> - Supported formats: flac, mp3, mp4, mpeg, mpga, m4a, ogg, wav, webm
+> - Using FLAC format (16kHz mono) for optimal file size
 
 ---
 
@@ -46,9 +49,15 @@ Integrate with Groq API to transcribe audio chunks. Leverage Groq's built-in tra
 
 ## Progress Log
 
-### Session [DATE]
+### Session 2024-12-10
 
-**Focus:**  
-**Completed:**  
-**Blockers:**  
-**Next Steps:**  
+**Focus:** Groq API setup and integration prep  
+**Completed:**
+
+- Groq API credentials configuration
+- Groq client service (`init_groq`, `get_groq_client`)
+- `TranscriptionModel` Pydantic schema
+- Retry logic in `AudioPipeline`
+
+**Blockers:** None  
+**Next Steps:** Implement actual transcription function call to Groq Whisper API  

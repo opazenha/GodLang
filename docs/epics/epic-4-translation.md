@@ -17,12 +17,14 @@ Use Groq's Qwen 32B model to translate English transcriptions to Chinese. Optimi
 - [ ] **4.1.1** Research Groq Qwen 32B API for translation
 - [ ] **4.1.2** Create translation service client
 - [ ] **4.1.3** Implement English-to-Chinese translation
-- [ ] **4.1.4** Define Pydantic schema for translation request/response
+- [x] **4.1.4** Define Pydantic schema for translation request/response (`TranslationModel` in `schemas.py`)
 - [ ] **4.1.5** Add error handling and retry logic
 - [ ] **4.1.6** Optimize prompt for translation quality
 
 > 💬 Notes:
 >
+> - Will reuse Groq client from Epic 3 (`groq_client.py`)
+> - `TranslationModel` schema already defined with `transcription_id` link
 
 ---
 
