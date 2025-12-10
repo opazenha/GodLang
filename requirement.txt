@@ -3,3 +3,4 @@ pydantic==2.12.5
 groq==0.37.1
 pymongo==4.15.5
 ffmpeg-python
+python-dotenv
