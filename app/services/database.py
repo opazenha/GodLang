@@ -56,7 +56,7 @@ class DatabaseError(Exception):
     pass
 
 
-async def save_transcription(transcription: TranscriptionModel) -> str:
+def save_transcription(transcription: TranscriptionModel) -> str:
     """Save transcription to MongoDB.
 
     Args:
@@ -146,7 +146,7 @@ def get_latest_transcription(session_id: str) -> Optional[dict]:
     return transcriptions[0] if transcriptions else None
 
 
-async def save_translation(translation: TranslationModel) -> str:
+def save_translation(translation: TranslationModel) -> str:
     """Save translation to MongoDB.
 
     Args:
@@ -179,7 +179,7 @@ async def save_translation(translation: TranslationModel) -> str:
         raise DatabaseError(f"Failed to save translation: {e}") from e
 
 
-async def get_translations_by_transcription(
+def get_translations_by_transcription(
     transcription_id: str, limit: Optional[int] = None
 ) -> list[dict]:
     """Get translations for a specific transcription.
