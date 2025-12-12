@@ -4,13 +4,13 @@
 Usage:
     # Show FFmpeg command (run this in a separate terminal)
     python scripts/test_audio_pipeline.py --show-command
-    
+
     # List audio devices
     python scripts/test_audio_pipeline.py --list-devices
-    
+
     # Run pipeline with mock processing (watch for files)
     python scripts/test_audio_pipeline.py --run
-    
+
     # Run pipeline with FFmpeg capture (full test)
     python scripts/test_audio_pipeline.py --run --capture
 """
@@ -28,16 +28,21 @@ sys.path.insert(0, PROJECT_ROOT)
 
 # Import config module directly (not through app package to avoid Flask)
 import importlib.util
-spec = importlib.util.spec_from_file_location("config", os.path.join(PROJECT_ROOT, "app", "config.py"))
+
+spec = importlib.util.spec_from_file_location(
+    "config", os.path.join(PROJECT_ROOT, "app", "config.py")
+)
 config_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(config_module)
 AudioConfig = config_module.AudioConfig
 
 # Import audio module directly
-spec2 = importlib.util.spec_from_file_location("audio", os.path.join(PROJECT_ROOT, "app", "services", "audio.py"))
+spec2 = importlib.util.spec_from_file_location(
+    "audio", os.path.join(PROJECT_ROOT, "app", "services", "audio.py")
+)
 audio_module = importlib.util.module_from_spec(spec2)
 # Inject AudioConfig into audio module's namespace before loading
-sys.modules['app.config'] = config_module
+sys.modules["app.config"] = config_module
 spec2.loader.exec_module(audio_module)
 
 AudioChunk = audio_module.AudioChunk
@@ -63,10 +68,34 @@ async def mock_transcribe(chunk) -> None:
     logger.info(f"[MOCK] Transcription complete: {chunk.filename}")
 
 
-async def run_pipeline(start_capture: bool = False) -> None:
+async def real_transcribe(chunk, session_id: str = "test-session") -> None:
+    """Real transcription function using Groq API."""
+    try:
+        # Import here to avoid issues when dependencies aren't available
+        from app.services.audio import process_audio_chunk_transcription
+
+        await process_audio_chunk_transcription(chunk, session_id)
+    except ImportError as e:
+        logger.error(f"Cannot import transcription services: {e}")
+        logger.error(
+            "Make sure all dependencies are installed: pip install -r requirements.txt"
+        )
+        raise
+
+
+async def run_pipeline(
+    start_capture: bool = False,
+    use_real_transcription: bool = False,
+    session_id: str = "test-session",
+) -> None:
     """Run the audio pipeline."""
-    pipeline = AudioPipeline(process_fn=mock_transcribe)
-    
+    if use_real_transcription:
+        pipeline = AudioPipeline(
+            process_fn=lambda chunk: real_transcribe(chunk, session_id)
+        )
+    else:
+        pipeline = AudioPipeline(process_fn=mock_transcribe)
+
     print("\n" + "=" * 60)
     print("AUDIO PIPELINE TEST")
     print("=" * 60)
@@ -75,22 +104,22 @@ async def run_pipeline(start_capture: bool = False) -> None:
     print(f"Sample rate: {AudioConfig.SAMPLE_RATE}Hz")
     print(f"Max retries: {AudioConfig.MAX_RETRIES}")
     print("=" * 60)
-    
+
     if not start_capture:
         print("\nFFmpeg command (run in separate terminal):")
         print("-" * 60)
         print(pipeline.get_ffmpeg_command())
         print("-" * 60)
-    
+
     print("\nStarting pipeline... Press Ctrl+C to stop.\n")
-    
+
     try:
         await pipeline.start(start_capture=start_capture)
-        
+
         # Keep running until interrupted
         while True:
             await asyncio.sleep(1)
-            
+
     except KeyboardInterrupt:
         print("\n\nShutting down...")
     finally:
@@ -117,7 +146,7 @@ def show_list_devices() -> None:
     print(cmd)
     print("-" * 60)
     print("\nRunning command...\n")
-    
+
     try:
         result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
         if result.stdout:
@@ -140,14 +169,31 @@ def setup_dirs() -> None:
 
 def main():
     parser = argparse.ArgumentParser(description="Test audio pipeline")
-    parser.add_argument("--show-command", action="store_true", help="Show FFmpeg command")
-    parser.add_argument("--list-devices", action="store_true", help="List audio devices")
+    parser.add_argument(
+        "--show-command", action="store_true", help="Show FFmpeg command"
+    )
+    parser.add_argument(
+        "--list-devices", action="store_true", help="List audio devices"
+    )
     parser.add_argument("--setup", action="store_true", help="Setup directories only")
     parser.add_argument("--run", action="store_true", help="Run the pipeline")
-    parser.add_argument("--capture", action="store_true", help="Also start FFmpeg capture")
-    
+    parser.add_argument(
+        "--capture", action="store_true", help="Also start FFmpeg capture"
+    )
+    parser.add_argument(
+        "--real-transcription",
+        action="store_true",
+        help="Use real Groq transcription instead of mock",
+    )
+    parser.add_argument(
+        "--session",
+        type=str,
+        default="test-session",
+        help="Session ID for transcriptions",
+    )
+
     args = parser.parse_args()
-    
+
     if args.show_command:
         show_ffmpeg_command()
     elif args.list_devices:
@@ -155,7 +201,13 @@ def main():
     elif args.setup:
         setup_dirs()
     elif args.run:
-        asyncio.run(run_pipeline(start_capture=args.capture))
+        asyncio.run(
+            run_pipeline(
+                start_capture=args.capture,
+                use_real_transcription=args.real_transcription,
+                session_id=args.session,
+            )
+        )
     else:
         parser.print_help()
 

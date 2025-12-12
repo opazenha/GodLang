@@ -23,9 +23,9 @@ Integrate with Groq API to transcribe audio chunks. Leverage Groq's built-in tra
 - [x] **3.1.1** Research Groq API documentation for audio transcription
 - [x] **3.1.2** Set up Groq API credentials in environment (`GROQ_API_KEY` in `config.py`)
 - [x] **3.1.3** Create Groq API client service (`app/services/groq_client.py`)
-- [ ] **3.1.4** Implement audio-to-English transcription function
+- [x] **3.1.4** Implement audio-to-English transcription function
 - [x] **3.1.5** Define Pydantic schema for transcription response (`TranscriptionModel` in `schemas.py`)
-- [ ] **3.1.6** Add error handling for API failures
+- [x] **3.1.6** Add error handling for API failures
 - [x] **3.1.7** Implement retry logic with exponential backoff (in `AudioPipeline`)
 
 > 💬 Notes:
@@ -38,9 +38,9 @@ Integrate with Groq API to transcribe audio chunks. Leverage Groq's built-in tra
 
 ## 3.2 Transcription Processing
 
-- [ ] **3.2.1** Parse and validate Groq API response
-- [ ] **3.2.2** Store transcription results in MongoDB
-- [ ] **3.2.3** Create MongoDB model for transcriptions
+- [x] **3.2.1** Parse and validate Groq API response
+- [x] **3.2.2** Store transcription results in MongoDB
+- [x] **3.2.3** Create MongoDB model for transcriptions
 
 > 💬 Notes:
 >
@@ -60,4 +60,4 @@ Integrate with Groq API to transcribe audio chunks. Leverage Groq's built-in tra
 - Retry logic in `AudioPipeline`
 
 **Blockers:** None  
-**Next Steps:** Implement actual transcription function call to Groq Whisper API  
+**Next Steps:** Epic 3-Transcription is complete. Ready for Epic 4-Translation.  
