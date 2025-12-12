@@ -18,12 +18,16 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from app.config import AudioConfig
-from app.services.database import save_transcription, DatabaseError
+from app.services.database import save_transcription, save_translation, DatabaseError
 from app.services.groq_client import (
     transcribe_audio,
+    translate_text,
     RetryableTranscriptionError,
+    RetryableTranslationError,
     TranscriptionError,
+    TranslationError,
 )
+from app.models.schemas import LanguageCode
 
 logger = logging.getLogger(__name__)
 
@@ -527,6 +531,53 @@ async def process_audio_chunk_transcription(chunk: AudioChunk, session_id: str) 
 
     except Exception as e:
         logger.error(f"Unexpected error processing {chunk.filename}: {e}")
+        raise AudioPipelineError(f"Unexpected error: {e}") from e
+
+
+async def process_translation_pipeline(
+    transcription_text: str,
+    transcription_id: str,
+    target_language: LanguageCode = LanguageCode.CHINESE,
+) -> None:
+    """Process translation pipeline for a transcription.
+
+    Args:
+        transcription_text: English text to translate.
+        transcription_id: ID of the source transcription.
+        target_language: Target language for translation.
+
+    Raises:
+        RetryableError: If translation failed but can be retried.
+        AudioPipelineError: If translation failed permanently.
+    """
+    try:
+        # Translate the transcription
+        translation = await translate_text(
+            transcription_text, transcription_id, target_language
+        )
+
+        # Save to database
+        translation_id = await save_translation(translation)
+
+        logger.info(
+            f"Successfully translated transcription {transcription_id} -> translation {translation_id}"
+        )
+
+    except RetryableTranslationError as e:
+        logger.warning(f"Retryable translation error: {e}")
+        raise RetryableError(f"Translation retryable: {e}") from e
+
+    except TranslationError as e:
+        logger.error(f"Translation failed: {e}")
+        raise AudioPipelineError(f"Translation failed: {e}") from e
+
+    except DatabaseError as e:
+        logger.error(f"Database error during translation: {e}")
+        # Database errors are typically retryable
+        raise RetryableError(f"Database error: {e}") from e
+
+    except Exception as e:
+        logger.error(f"Unexpected error during translation: {e}")
         raise AudioPipelineError(f"Unexpected error: {e}") from e
 
 

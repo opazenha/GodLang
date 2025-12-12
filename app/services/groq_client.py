@@ -7,7 +7,7 @@ from typing import Optional
 from flask import Flask
 from groq import Groq
 
-from app.models.schemas import TranscriptionModel
+from app.models.schemas import TranscriptionModel, TranslationModel, LanguageCode
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +20,18 @@ class TranscriptionError(Exception):
 
 class RetryableTranscriptionError(TranscriptionError):
     """Retryable transcription error."""
+
+    pass
+
+
+class TranslationError(Exception):
+    """Translation service error."""
+
+    pass
+
+
+class RetryableTranslationError(TranslationError):
+    """Retryable translation error."""
 
     pass
 
@@ -126,3 +138,96 @@ async def transcribe_audio(
 
         logger.error(f"Transcription failed for {audio_file.name}: {error_msg}")
         raise TranscriptionError(error_msg) from e
+
+
+async def translate_text(
+    text: str,
+    transcription_id: str,
+    target_language: LanguageCode = LanguageCode.CHINESE,
+) -> TranslationModel:
+    """Translate English text to target language using Groq Qwen 32B model.
+
+    Args:
+        text: English text to translate.
+        transcription_id: ID of the source transcription.
+        target_language: Target language for translation.
+
+    Returns:
+        TranslationModel with the translated text.
+
+    Raises:
+        TranslationError: If translation fails permanently.
+        RetryableTranslationError: If translation failed but can be retried.
+    """
+    client = get_groq_client()
+    if not client:
+        raise TranslationError("Groq client not initialized")
+
+    if not text or not text.strip():
+        raise TranslationError("Empty text for translation")
+
+    try:
+        logger.info(f"Translating text ({len(text)} chars) to {target_language.value}")
+
+        # Optimized prompt for high-quality translation
+        system_prompt = f"""You are a professional translator specializing in English to {target_language.value} translation.
+        
+Your task is to translate the given English text into natural, accurate {target_language.value}.
+Follow these guidelines:
+- Preserve the original meaning and tone
+- Use natural, fluent {target_language.value} expressions
+- Maintain proper grammar and syntax
+- For technical terms, use appropriate {target_language.value} equivalents
+- Do not add explanations or notes - only return the translation
+- If the text contains multiple sentences, translate all of them
+- Keep the same level of formality as the original text"""
+
+        user_prompt = (
+            f"Translate this English text to {target_language.value}:\n\n{text}"
+        )
+
+response = client.chat.completions.create(
+            model="qwen/qwen3-32b",  # Qwen 3 32B for high-quality translation
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.3,  # Lower temperature for consistent translation
+            max_tokens=2048,  # Sufficient for most translations
+        )
+
+        translation_text = response.choices[0].message.content
+
+        if not translation_text or not translation_text.strip():
+            raise RetryableTranslationError("Empty translation result")
+
+        logger.info(f"Translation successful: {len(translation_text)} characters")
+
+        return TranslationModel(
+            transcription_id=transcription_id,
+            transcript=text,
+            translation=translation_text.strip(),
+            language=target_language,
+        )
+
+    except Exception as e:
+        error_msg = str(e)
+
+        # Check for retryable errors
+        retryable_patterns = [
+            "rate limit",
+            "timeout",
+            "connection",
+            "network",
+            "temporary",
+            "service unavailable",
+            "internal server error",
+            "overloaded",
+        ]
+
+        if any(pattern in error_msg.lower() for pattern in retryable_patterns):
+            logger.warning(f"Retryable translation error: {error_msg}")
+            raise RetryableTranslationError(error_msg) from e
+
+        logger.error(f"Translation failed: {error_msg}")
+        raise TranslationError(error_msg) from e

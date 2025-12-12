@@ -7,7 +7,7 @@ from flask import Flask
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure, PyMongoError
 
-from app.models.schemas import TranscriptionModel
+from app.models.schemas import TranscriptionModel, TranslationModel, LanguageCode
 
 logger = logging.getLogger(__name__)
 
@@ -138,3 +138,137 @@ async def get_latest_transcription(session_id: str) -> Optional[dict]:
     """
     transcriptions = await get_transcriptions_by_session(session_id, limit=1)
     return transcriptions[0] if transcriptions else None
+
+
+async def save_translation(translation: TranslationModel) -> str:
+    """Save translation to MongoDB.
+
+    Args:
+        translation: TranslationModel instance to save.
+
+    Returns:
+        The inserted document ID.
+
+    Raises:
+        DatabaseError: If save operation fails.
+    """
+    db = get_db()
+    if not db:
+        raise DatabaseError("Database not connected")
+
+    try:
+        # Convert to dict for MongoDB storage
+        translation_dict = translation.model_dump(exclude={"id"})
+
+        result = db.translations.insert_one(translation_dict)
+        translation_id = str(result.inserted_id)
+
+        logger.info(
+            f"Saved translation {translation_id} for transcription {translation.transcription_id}"
+        )
+        return translation_id
+
+    except PyMongoError as e:
+        logger.error(f"Failed to save translation: {e}")
+        raise DatabaseError(f"Failed to save translation: {e}") from e
+
+
+async def get_translations_by_transcription(
+    transcription_id: str, limit: Optional[int] = None
+) -> list[dict]:
+    """Get translations for a specific transcription.
+
+    Args:
+        transcription_id: Transcription ID to filter by.
+        limit: Optional maximum number of results.
+
+    Returns:
+        List of translation documents.
+
+    Raises:
+        DatabaseError: If query operation fails.
+    """
+    db = get_db()
+    if not db:
+        raise DatabaseError("Database not connected")
+
+    try:
+        query = {"transcription_id": transcription_id}
+        cursor = db.translations.find(query).sort("created_at", 1)
+
+        if limit:
+            cursor = cursor.limit(limit)
+
+        translations = []
+        for doc in cursor:
+            doc["_id"] = str(doc["_id"])  # Convert ObjectId to string
+            translations.append(doc)
+
+        logger.debug(
+            f"Found {len(translations)} translations for transcription {transcription_id}"
+        )
+        return translations
+
+    except PyMongoError as e:
+        logger.error(
+            f"Failed to get translations for transcription {transcription_id}: {e}"
+        )
+        raise DatabaseError(f"Failed to get translations: {e}") from e
+
+
+async def get_translations_by_session(
+    session_id: str, language: Optional[LanguageCode] = None
+) -> list[dict]:
+    """Get all translations for a session, optionally filtered by language.
+
+    Args:
+        session_id: Session ID to filter by.
+        language: Optional language filter.
+
+    Returns:
+        List of translation documents.
+
+    Raises:
+        DatabaseError: If query operation fails.
+    """
+    db = get_db()
+    if not db:
+        raise DatabaseError("Database not connected")
+
+    try:
+        # Build query
+        query = {}
+        if language:
+            query["language"] = language.value
+
+        # Join with transcriptions to filter by session_id
+        pipeline = [
+            {
+                "$lookup": {
+                    "from": "transcriptions",
+                    "localField": "transcription_id",
+                    "foreignField": "_id",
+                    "as": "transcription",
+                }
+            },
+            {"$unwind": "$transcription"},
+            {"$match": {"transcription.session_id": session_id}},
+            {"$sort": {"created_at": 1}},
+        ]
+
+        if language:
+            pipeline.append({"$match": {"language": language.value}})
+
+        cursor = db.translations.aggregate(pipeline)
+
+        translations = []
+        for doc in cursor:
+            doc["_id"] = str(doc["_id"])
+            translations.append(doc)
+
+        logger.debug(f"Found {len(translations)} translations for session {session_id}")
+        return translations
+
+    except PyMongoError as e:
+        logger.error(f"Failed to get translations for session {session_id}: {e}")
+        raise DatabaseError(f"Failed to get translations: {e}") from e
