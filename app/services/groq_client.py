@@ -153,7 +153,7 @@ async def translate_text(
         target_language: Target language for translation.
 
     Returns:
-        TranslationModel with the translated text.
+        TranslationModel with translated text.
 
     Raises:
         TranslationError: If translation fails permanently.
@@ -186,11 +186,11 @@ Follow these guidelines:
             f"Translate this English text to {target_language.value}:\n\n{text}"
         )
 
-response = client.chat.completions.create(
+        response = client.chat.completions.create(
             model="qwen/qwen3-32b",  # Qwen 3 32B for high-quality translation
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
+                {"role": "user", "content": user_prompt},
             ],
             temperature=0.3,  # Lower temperature for consistent translation
             max_tokens=2048,  # Sufficient for most translations
