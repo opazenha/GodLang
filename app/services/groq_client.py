@@ -194,6 +194,7 @@ Follow these guidelines:
             ],
             temperature=0.3,  # Lower temperature for consistent translation
             max_tokens=2048,  # Sufficient for most translations
+            include_reasoning=False,
         )
 
         translation_text = response.choices[0].message.content
