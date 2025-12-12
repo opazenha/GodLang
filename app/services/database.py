@@ -7,7 +7,12 @@ from flask import Flask
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure, PyMongoError
 
-from app.models.schemas import TranscriptionModel, TranslationModel, LanguageCode
+from app.models.schemas import (
+    TranscriptionModel,
+    TranslationModel,
+    SessionModel,
+    LanguageCode,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -24,13 +29,13 @@ def init_db(app: Flask) -> None:
         client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
         # Verify connection
         client.admin.command("ping")
-        app.mongo_client = client
-        app.db = client[app.config.get("MONGO_DB_NAME", "godlang")]
+        setattr(app, "mongo_client", client)
+        setattr(app, "db", client[app.config.get("MONGO_DB_NAME", "godlang")])
         app.logger.info("Connected to MongoDB")
     except ConnectionFailure as e:
         app.logger.error(f"Failed to connect to MongoDB: {e}")
-        app.mongo_client = None
-        app.db = None
+        setattr(app, "mongo_client", None)
+        setattr(app, "db", None)
 
 
 def get_db():
@@ -41,7 +46,8 @@ def get_db():
     """
     from flask import current_app
 
-    return getattr(current_app, "db", None)
+    db = getattr(current_app, "db", None)
+    return db if db is not None else None
 
 
 class DatabaseError(Exception):
@@ -63,7 +69,7 @@ async def save_transcription(transcription: TranscriptionModel) -> str:
         DatabaseError: If save operation fails.
     """
     db = get_db()
-    if not db:
+    if db is None:
         raise DatabaseError("Database not connected")
 
     try:
@@ -83,7 +89,7 @@ async def save_transcription(transcription: TranscriptionModel) -> str:
         raise DatabaseError(f"Failed to save transcription: {e}") from e
 
 
-async def get_transcriptions_by_session(
+def get_transcriptions_by_session(
     session_id: str, limit: Optional[int] = None
 ) -> list[dict]:
     """Get transcriptions for a specific session.
@@ -99,7 +105,7 @@ async def get_transcriptions_by_session(
         DatabaseError: If query operation fails.
     """
     db = get_db()
-    if not db:
+    if db is None:
         raise DatabaseError("Database not connected")
 
     try:
@@ -124,7 +130,7 @@ async def get_transcriptions_by_session(
         raise DatabaseError(f"Failed to get transcriptions: {e}") from e
 
 
-async def get_latest_transcription(session_id: str) -> Optional[dict]:
+def get_latest_transcription(session_id: str) -> Optional[dict]:
     """Get the latest transcription for a session.
 
     Args:
@@ -136,7 +142,7 @@ async def get_latest_transcription(session_id: str) -> Optional[dict]:
     Raises:
         DatabaseError: If query operation fails.
     """
-    transcriptions = await get_transcriptions_by_session(session_id, limit=1)
+    transcriptions = get_transcriptions_by_session(session_id, limit=1)
     return transcriptions[0] if transcriptions else None
 
 
@@ -153,7 +159,7 @@ async def save_translation(translation: TranslationModel) -> str:
         DatabaseError: If save operation fails.
     """
     db = get_db()
-    if not db:
+    if db is None:
         raise DatabaseError("Database not connected")
 
     try:
@@ -189,7 +195,7 @@ async def get_translations_by_transcription(
         DatabaseError: If query operation fails.
     """
     db = get_db()
-    if not db:
+    if db is None:
         raise DatabaseError("Database not connected")
 
     try:
@@ -216,8 +222,10 @@ async def get_translations_by_transcription(
         raise DatabaseError(f"Failed to get translations: {e}") from e
 
 
-async def get_translations_by_session(
-    session_id: str, language: Optional[LanguageCode] = None
+def get_translations_by_session(
+    session_id: str,
+    limit: Optional[int] = None,
+    language: Optional[LanguageCode] = None,
 ) -> list[dict]:
     """Get all translations for a session, optionally filtered by language.
 
@@ -232,15 +240,12 @@ async def get_translations_by_session(
         DatabaseError: If query operation fails.
     """
     db = get_db()
-    if not db:
+    if db is None:
         raise DatabaseError("Database not connected")
 
     try:
         # Build query
         query = {}
-        if language:
-            query["language"] = language.value
-
         # Join with transcriptions to filter by session_id
         pipeline = [
             {
@@ -272,3 +277,101 @@ async def get_translations_by_session(
     except PyMongoError as e:
         logger.error(f"Failed to get translations for session {session_id}: {e}")
         raise DatabaseError(f"Failed to get translations: {e}") from e
+
+
+def save_session(session: SessionModel) -> str:
+    """Save session to MongoDB.
+
+    Args:
+        session: SessionModel instance to save.
+
+    Returns:
+        The inserted document ID.
+
+    Raises:
+        DatabaseError: If save operation fails.
+    """
+    db = get_db()
+    if db is None:
+        raise DatabaseError("Database not connected")
+
+    try:
+        # Convert to dict for MongoDB storage
+        session_dict = session.model_dump(exclude={"id"})
+
+        result = db.sessions.insert_one(session_dict)
+        session_id = str(result.inserted_id)
+
+        logger.info(f"Saved session {session_id} with language {session.language}")
+        return session_id
+
+    except PyMongoError as e:
+        logger.error(f"Failed to save session: {e}")
+        raise DatabaseError(f"Failed to save session: {e}") from e
+
+
+def get_session(session_id: str) -> Optional[dict]:
+    """Get session by ID.
+
+    Args:
+        session_id: Session ID to retrieve.
+
+    Returns:
+        Session document or None.
+
+    Raises:
+        DatabaseError: If query operation fails.
+    """
+    db = get_db()
+    if db is None:
+        raise DatabaseError("Database not connected")
+
+    try:
+        from bson import ObjectId
+
+        object_id = ObjectId(session_id)
+        doc = db.sessions.find_one({"_id": object_id})
+
+        if doc:
+            doc["_id"] = str(doc["_id"])
+            return doc
+        return None
+
+    except PyMongoError as e:
+        logger.error(f"Failed to get session {session_id}: {e}")
+        raise DatabaseError(f"Failed to get session: {e}") from e
+
+
+def update_session_status(session_id: str, status: str) -> bool:
+    """Update session status.
+
+    Args:
+        session_id: Session ID to update.
+        status: New status value.
+
+    Returns:
+        True if update succeeded, False otherwise.
+
+    Raises:
+        DatabaseError: If update operation fails.
+    """
+    db = get_db()
+    if db is None:
+        raise DatabaseError("Database not connected")
+
+    try:
+        from bson import ObjectId
+
+        object_id = ObjectId(session_id)
+        result = db.sessions.update_one(
+            {"_id": object_id}, {"$set": {"status": status}}
+        )
+
+        success = result.modified_count > 0
+        if success:
+            logger.info(f"Updated session {session_id} status to {status}")
+        return success
+
+    except PyMongoError as e:
+        logger.error(f"Failed to update session {session_id} status: {e}")
+        raise DatabaseError(f"Failed to update session status: {e}") from e
