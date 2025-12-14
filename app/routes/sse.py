@@ -3,8 +3,9 @@
 import json
 import time
 from flask import Blueprint, Response, request, current_app
-from app.models.schemas import APIResponse
+from app.models.schemas import APIResponse, LanguageCode
 from app.services.database import get_latest_transcription, get_translations_by_session
+from app.services.broadcast import get_broadcast_manager
 
 sse_bp = Blueprint("sse", __name__, url_prefix="/api/sse")
 
@@ -71,6 +72,109 @@ def translation_stream(session_id):
                     yield f"data: {json.dumps(error_data)}\n\n"
                     time.sleep(5)
 
+    return Response(
+        generate(),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "Cache-Control",
+        },
+    )
+
+
+@sse_bp.route("/broadcast/<language>", methods=["GET"])
+def broadcast_stream(language):
+    """Stream real-time translation updates for a broadcast.
+    
+    Auto-starts a session if none exists for the language.
+    Clients simply connect to this endpoint to receive translations.
+    
+    Args:
+        language: Language code (e.g., 'zh' for Chinese).
+        
+    Returns:
+        SSE stream with translation updates.
+    """
+    # Validate language
+    try:
+        lang_code = LanguageCode(language)
+    except ValueError:
+        def error_gen():
+            yield f"data: {json.dumps({'type': 'error', 'message': f'Invalid language: {language}'})}\n\n"
+        return Response(error_gen(), mimetype="text/event-stream")
+    
+    manager = get_broadcast_manager()
+    
+    def generate():
+        # Register client and get/create session
+        session_id = manager.add_client(lang_code)
+        
+        if not session_id:
+            yield f"data: {json.dumps({'type': 'error', 'message': 'Failed to join broadcast'})}\n\n"
+            return
+        
+        # Track the last known translation to avoid duplicates
+        last_translation_id = None
+        
+        # Send initial connection message
+        yield f"data: {json.dumps({'type': 'connected', 'language': language, 'session_id': session_id})}\n\n"
+        
+        try:
+            with current_app.app_context():
+                while True:
+                    try:
+                        # Check if broadcast is still active
+                        if not manager.is_active(lang_code):
+                            yield f"data: {json.dumps({'type': 'broadcast_ended', 'message': 'Broadcast has ended'})}\n\n"
+                            break
+                        
+                        # Get latest transcription
+                        transcription = get_latest_transcription(session_id)
+                        
+                        if transcription:
+                            # Get latest translation for this transcription
+                            translations = get_translations_by_session(session_id, limit=1)
+                            
+                            if translations:
+                                latest_translation = translations[-1]
+                                translation_id = latest_translation.get("_id")
+                                
+                                # Only send if we have a new translation
+                                if translation_id != last_translation_id:
+                                    last_translation_id = translation_id
+                                    
+                                    # Send translation update
+                                    update_data = {
+                                        "type": "translation",
+                                        "language": language,
+                                        "session_id": session_id,
+                                        "transcription": transcription,
+                                        "translation": latest_translation,
+                                        "timestamp": time.time(),
+                                    }
+                                    yield f"data: {json.dumps(update_data)}\n\n"
+                        
+                        # Send heartbeat every 5 seconds
+                        yield f"data: {json.dumps({'type': 'heartbeat', 'timestamp': time.time()})}\n\n"
+                        
+                        # Wait before next check
+                        time.sleep(2)
+                        
+                    except Exception as e:
+                        # Send error message and continue
+                        error_data = {
+                            "type": "error",
+                            "message": str(e),
+                            "timestamp": time.time(),
+                        }
+                        yield f"data: {json.dumps(error_data)}\n\n"
+                        time.sleep(5)
+        finally:
+            # Unregister client on disconnect
+            manager.remove_client(lang_code)
+    
     return Response(
         generate(),
         mimetype="text/event-stream",

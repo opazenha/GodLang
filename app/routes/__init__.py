@@ -13,8 +13,10 @@ def register_routes(app: Flask) -> None:
     from app.routes.session import session_bp
     from app.routes.translation import translation_bp
     from app.routes.sse import sse_bp
+    from app.routes.broadcast import broadcast_bp
 
     app.register_blueprint(health_bp)
     app.register_blueprint(session_bp)
     app.register_blueprint(translation_bp)
     app.register_blueprint(sse_bp)
+    app.register_blueprint(broadcast_bp)

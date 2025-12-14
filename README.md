@@ -83,15 +83,24 @@ GodLang/
 │   ├── __init__.py          # Flask app factory
 │   ├── config.py             # Configuration (AudioConfig, Config)
 │   ├── models/               # Pydantic schemas
-│   ├── routes/               # API endpoints
+│   ├── routes/
+│   │   ├── broadcast.py      # Broadcast management API
+│   │   ├── session.py        # Session management API
+│   │   ├── sse.py            # Server-Sent Events endpoints
+│   │   └── translation.py    # Translation retrieval API
 │   ├── services/
 │   │   ├── audio.py          # Audio pipeline (FFmpeg, FileWatcher)
+│   │   ├── broadcast.py      # Broadcast state manager
 │   │   ├── database.py       # MongoDB client
 │   │   └── groq_client.py    # Groq API client
 │   └── utils/
 ├── scripts/
-│   └── test_audio_pipeline.py  # Dev testing script
+│   ├── start_transcription.bat  # Windows: Start transcription
+│   ├── stop_transcription.bat   # Windows: Stop transcription
+│   ├── list_audio_devices.bat   # Windows: List audio devices
+│   └── README.md                 # Volunteer guide
 ├── docs/
+│   ├── API.md                # API documentation
 │   ├── PRD.md                # Product Requirements
 │   └── epics/                # Task tracking
 ├── docker-compose.yaml
@@ -161,9 +170,22 @@ pytest
 python scripts/test_audio_pipeline.py --show-command
 ```
 
+## Volunteer Usage (Windows)
+
+For church volunteers running transcription on Windows:
+
+1. **First-time setup**: Run `scripts/list_audio_devices.bat` to find your mixing board device name
+2. **Edit configuration**: Update `AUDIO_DEVICE` in `scripts/start_transcription.bat`
+3. **Start transcription**: Double-click `scripts/start_transcription.bat`
+4. **Stop transcription**: Close the window or run `scripts/stop_transcription.bat`
+
+See `scripts/README.md` for detailed instructions.
+
 ## Documentation
 
+- [API Documentation](docs/API.md)
 - [Product Requirements (PRD)](docs/PRD.md)
+- [Volunteer Guide](scripts/README.md)
 - [Epic 1: Setup](docs/epics/epic-1-setup.md)
 - [Epic 2: Audio Pipeline](docs/epics/epic-2-audio.md)
 - [Epic 3: Transcription](docs/epics/epic-3-transcription.md)

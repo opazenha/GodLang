@@ -113,9 +113,16 @@ Use Groq's Qwen 32B model to translate English transcriptions to Chinese. Optimi
 
 ### Epic 5: Client API Endpoints
 
-Build REST API endpoints for clients to create sessions, submit audio, and receive translations. Implement real-time delivery mechanism (SSE, WebSocket, or polling) for translation updates.
+Build REST API endpoints for clients to create sessions, submit audio, and receive translations. Implement real-time delivery mechanism (SSE) for translation updates.
 
-**Expected Outcome:** Clients can connect, select language preference, and receive real-time translated text.
+**Includes:**
+
+- Session management API (`/api/session`)
+- Translation retrieval API (`/api/translation`)
+- Broadcast management API (`/api/broadcast`) - simplified volunteer workflow
+- SSE endpoints for real-time updates (`/api/sse/broadcast/{language}`)
+
+**Expected Outcome:** Clients can connect, select language preference, and receive real-time translated text. Volunteers can start/stop broadcasts with simple scripts.
 
 ### Epic 6: Data Models & Persistence
 
@@ -167,6 +174,8 @@ docker-compose down
 | D4 | Split PRD into epic files | Easier tracking and management | 2024-12-10 |
 | D5 | Async file-based audio pipeline (no HTTP endpoint) | Simpler, more reliable, easier to debug; FFmpeg writes directly to disk | 2024-12-10 |
 | D6 | Cross-platform support (Linux dev, Windows prod) | Dev on Arch Linux with laptop mic, deploy on Windows with mixing board | 2024-12-10 |
+| D7 | Broadcast API for simplified volunteer workflow | One session per language, auto-start on client connect, manual stop only | 2024-12-14 |
+| D8 | Windows batch scripts for volunteers | Double-click to start/stop, no technical knowledge required | 2024-12-14 |
 
 ---
 
@@ -174,7 +183,8 @@ docker-compose down
 
 Ideas for future consideration:
 
-- [ ] Support additional languages beyond Chinese
+- [ ] Support additional languages beyond Chinese (Ukrainian planned)
 - [ ] Add authentication for production use
 - [ ] Implement caching for repeated phrases
 - [ ] Add audio quality detection/validation
+- [ ] Web-based volunteer control panel
