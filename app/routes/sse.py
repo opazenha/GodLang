@@ -21,6 +21,8 @@ def translation_stream(session_id):
         SSE stream with translation updates.
     """
 
+    app = current_app._get_current_object()
+
     def generate():
         # Track the last known translation to avoid duplicates
         last_translation_id = None
@@ -28,7 +30,7 @@ def translation_stream(session_id):
         # Send initial connection message
         yield f"data: {json.dumps({'type': 'connected', 'session_id': session_id})}\n\n"
 
-        with current_app.app_context():
+        with app.app_context():
             while True:
                 try:
                     # Get latest transcription
@@ -106,6 +108,8 @@ def broadcast_stream(language):
         return Response(error_gen(), mimetype="text/event-stream")
     
     manager = get_broadcast_manager()
+
+    app = current_app._get_current_object()
     
     def generate():
         # Register client and get/create session
@@ -122,29 +126,29 @@ def broadcast_stream(language):
         yield f"data: {json.dumps({'type': 'connected', 'language': language, 'session_id': session_id})}\n\n"
         
         try:
-            with current_app.app_context():
+            with app.app_context():
                 while True:
                     try:
                         # Check if broadcast is still active
                         if not manager.is_active(lang_code):
                             yield f"data: {json.dumps({'type': 'broadcast_ended', 'message': 'Broadcast has ended'})}\n\n"
                             break
-                        
+
                         # Get latest transcription
                         transcription = get_latest_transcription(session_id)
-                        
+
                         if transcription:
                             # Get latest translation for this transcription
                             translations = get_translations_by_session(session_id, limit=1)
-                            
+
                             if translations:
                                 latest_translation = translations[-1]
                                 translation_id = latest_translation.get("_id")
-                                
+
                                 # Only send if we have a new translation
                                 if translation_id != last_translation_id:
                                     last_translation_id = translation_id
-                                    
+
                                     # Send translation update
                                     update_data = {
                                         "type": "translation",
@@ -155,13 +159,13 @@ def broadcast_stream(language):
                                         "timestamp": time.time(),
                                     }
                                     yield f"data: {json.dumps(update_data)}\n\n"
-                        
+
                         # Send heartbeat every 5 seconds
                         yield f"data: {json.dumps({'type': 'heartbeat', 'timestamp': time.time()})}\n\n"
-                        
+
                         # Wait before next check
                         time.sleep(2)
-                        
+
                     except Exception as e:
                         # Send error message and continue
                         error_data = {
@@ -198,6 +202,8 @@ def session_stream(session_id):
         SSE stream with session status updates.
     """
 
+    app = current_app._get_current_object()
+
     def generate():
         from app.services.database import get_session
 
@@ -206,7 +212,7 @@ def session_stream(session_id):
 
         last_status = None
 
-        with current_app.app_context():
+        with app.app_context():
             while True:
                 try:
                     # Get current session status

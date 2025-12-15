@@ -13,9 +13,16 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional, Dict
 from enum import Enum
+from functools import partial
 
 from app.models.schemas import LanguageCode, SessionStatus, SessionModel
 from app.services.database import save_session, update_session_status, get_session
+from app.services.audio import (
+    AudioPipeline,
+    AudioChunk,
+    process_audio_chunk_transcription,
+    process_translation_pipeline,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +45,8 @@ class BroadcastSession:
     client_count: int = 0
     started_at: datetime = field(default_factory=datetime.utcnow)
     audio_pid: Optional[int] = None  # FFmpeg process ID if running
+    pipeline: Optional[AudioPipeline] = None  # Audio processing pipeline
+    pipeline_task: Optional[asyncio.Task] = None  # Async task running the pipeline
     
     def to_dict(self) -> dict:
         """Convert to dictionary for API responses."""
@@ -73,8 +82,19 @@ class BroadcastManager:
             return
         self._broadcasts: Dict[LanguageCode, BroadcastSession] = {}
         self._client_locks: Dict[LanguageCode, threading.Lock] = {}
+        self._event_loop: Optional[asyncio.AbstractEventLoop] = None
         self._initialized = True
         logger.info("BroadcastManager initialized")
+    
+    def _get_or_create_event_loop(self) -> asyncio.AbstractEventLoop:
+        """Get or create an event loop for async operations."""
+        try:
+            loop = asyncio.get_running_loop()
+            return loop
+        except RuntimeError:
+            if self._event_loop is None or self._event_loop.is_closed():
+                self._event_loop = asyncio.new_event_loop()
+            return self._event_loop
     
     def _get_lock(self, language: LanguageCode) -> threading.Lock:
         """Get or create lock for a language."""
@@ -91,10 +111,47 @@ class BroadcastManager:
         broadcast = self._broadcasts.get(language)
         return broadcast is not None and broadcast.status == BroadcastStatus.ACTIVE
     
+    async def _process_chunk_with_translation(
+        self,
+        chunk: AudioChunk,
+        session_id: str,
+        target_language: LanguageCode,
+        app,
+    ) -> None:
+        """Process an audio chunk through transcription and translation."""
+        from app.services.database import save_transcription
+        from app.services.groq_client import transcribe_audio, translate_text
+        
+        try:
+            with app.app_context():
+                # Transcribe the audio
+                transcription = await transcribe_audio(chunk.path, session_id)
+                
+                # Save transcription to database
+                transcription_id = save_transcription(transcription)
+                logger.info(f"Saved transcription {transcription_id}: {transcription.transcript[:50]}...")
+                
+                # Translate to target language
+                translation = await translate_text(
+                    transcription.transcript,
+                    transcription_id,
+                    target_language,
+                )
+                
+                # Save translation to database
+                from app.services.database import save_translation
+                translation_id = save_translation(translation)
+                logger.info(f"Saved translation {translation_id}: {translation.translation[:50]}...")
+            
+        except Exception as e:
+            logger.error(f"Error processing chunk {chunk.filename}: {e}")
+            raise
+
     def start_broadcast(self, language: LanguageCode) -> BroadcastSession:
         """Start a new broadcast session for a language.
         
-        Creates a new database session and registers the broadcast.
+        Creates a new database session, registers the broadcast, and starts
+        the audio capture pipeline.
         
         Args:
             language: Target language for the broadcast.
@@ -105,6 +162,8 @@ class BroadcastManager:
         Raises:
             ValueError: If broadcast already active for this language.
         """
+        from flask import current_app
+        
         with self._get_lock(language):
             existing = self._broadcasts.get(language)
             if existing and existing.status == BroadcastStatus.ACTIVE:
@@ -117,19 +176,57 @@ class BroadcastManager:
             )
             session_id = save_session(session_model)
             
+            # Get the Flask app for use in the background thread
+            app = current_app._get_current_object()
+            
+            # Create audio pipeline with processing function
+            async def process_fn(chunk: AudioChunk) -> None:
+                await self._process_chunk_with_translation(chunk, session_id, language, app)
+            
+            pipeline = AudioPipeline(process_fn=process_fn)
+            
             # Create broadcast session
             broadcast = BroadcastSession(
                 language=language,
                 session_id=session_id,
                 status=BroadcastStatus.ACTIVE,
+                pipeline=pipeline,
             )
             self._broadcasts[language] = broadcast
+            
+            # Start the audio pipeline in a background thread
+            self._start_pipeline_async(broadcast)
             
             logger.info(f"Started broadcast for {language.value}, session_id={session_id}")
             return broadcast
     
+    def _start_pipeline_async(self, broadcast: BroadcastSession) -> None:
+        """Start the audio pipeline in a background thread."""
+        def run_pipeline():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                # Start pipeline with FFmpeg capture
+                loop.run_until_complete(broadcast.pipeline.start(start_capture=True))
+                # Keep running until stopped
+                loop.run_forever()
+            except Exception as e:
+                logger.error(f"Pipeline error for {broadcast.language.value}: {e}")
+            finally:
+                loop.close()
+        
+        thread = threading.Thread(
+            target=run_pipeline,
+            name=f"pipeline-{broadcast.language.value}",
+            daemon=True,
+        )
+        thread.start()
+        logger.info(f"Started audio pipeline thread for {broadcast.language.value}")
+    
     def stop_broadcast(self, language: LanguageCode) -> bool:
         """Stop broadcast for a language.
+        
+        Stops the audio pipeline and cleans up resources.
         
         Args:
             language: Language to stop broadcast for.
@@ -141,6 +238,17 @@ class BroadcastManager:
             broadcast = self._broadcasts.get(language)
             if not broadcast:
                 return False
+            
+            # Stop the audio pipeline
+            if broadcast.pipeline:
+                try:
+                    # Create a new loop to stop the pipeline
+                    loop = asyncio.new_event_loop()
+                    loop.run_until_complete(broadcast.pipeline.stop())
+                    loop.close()
+                    logger.info(f"Stopped audio pipeline for {language.value}")
+                except Exception as e:
+                    logger.error(f"Error stopping pipeline: {e}")
             
             # Update database session status
             try:

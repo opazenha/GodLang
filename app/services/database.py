@@ -4,6 +4,7 @@ import logging
 from typing import Optional
 
 from flask import Flask
+from bson import ObjectId
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure, PyMongoError
 
@@ -75,6 +76,10 @@ def save_transcription(transcription: TranscriptionModel) -> str:
     try:
         # Convert to dict for MongoDB storage
         transcription_dict = transcription.model_dump(exclude={"id"})
+        
+        # Convert session_id string to ObjectId for MongoDB schema validation
+        if "session_id" in transcription_dict and isinstance(transcription_dict["session_id"], str):
+            transcription_dict["session_id"] = ObjectId(transcription_dict["session_id"])
 
         result = db.transcriptions.insert_one(transcription_dict)
         transcription_id = str(result.inserted_id)
@@ -109,7 +114,8 @@ def get_transcriptions_by_session(
         raise DatabaseError("Database not connected")
 
     try:
-        query = {"session_id": session_id}
+        # Convert session_id to ObjectId for query
+        query = {"session_id": ObjectId(session_id) if isinstance(session_id, str) else session_id}
         cursor = db.transcriptions.find(query).sort("created_at", 1)
 
         if limit:
@@ -118,6 +124,10 @@ def get_transcriptions_by_session(
         transcriptions = []
         for doc in cursor:
             doc["_id"] = str(doc["_id"])  # Convert ObjectId to string
+            if "session_id" in doc and isinstance(doc["session_id"], ObjectId):
+                doc["session_id"] = str(doc["session_id"])
+            if "created_at" in doc and hasattr(doc["created_at"], "isoformat"):
+                doc["created_at"] = doc["created_at"].isoformat()
             transcriptions.append(doc)
 
         logger.debug(
@@ -165,6 +175,10 @@ def save_translation(translation: TranslationModel) -> str:
     try:
         # Convert to dict for MongoDB storage
         translation_dict = translation.model_dump(exclude={"id"})
+        
+        # Convert transcription_id string to ObjectId for MongoDB schema validation
+        if "transcription_id" in translation_dict and isinstance(translation_dict["transcription_id"], str):
+            translation_dict["transcription_id"] = ObjectId(translation_dict["transcription_id"])
 
         result = db.translations.insert_one(translation_dict)
         translation_id = str(result.inserted_id)
@@ -257,7 +271,7 @@ def get_translations_by_session(
                 }
             },
             {"$unwind": "$transcription"},
-            {"$match": {"transcription.session_id": session_id}},
+            {"$match": {"transcription.session_id": ObjectId(session_id) if isinstance(session_id, str) else session_id}},
             {"$sort": {"created_at": 1}},
         ]
 
@@ -269,6 +283,18 @@ def get_translations_by_session(
         translations = []
         for doc in cursor:
             doc["_id"] = str(doc["_id"])
+            if "transcription_id" in doc and isinstance(doc["transcription_id"], ObjectId):
+                doc["transcription_id"] = str(doc["transcription_id"])
+            if "created_at" in doc and hasattr(doc["created_at"], "isoformat"):
+                doc["created_at"] = doc["created_at"].isoformat()
+            # Convert nested transcription ObjectIds and datetime if present
+            if "transcription" in doc and isinstance(doc["transcription"], dict):
+                if "_id" in doc["transcription"]:
+                    doc["transcription"]["_id"] = str(doc["transcription"]["_id"])
+                if "session_id" in doc["transcription"] and isinstance(doc["transcription"]["session_id"], ObjectId):
+                    doc["transcription"]["session_id"] = str(doc["transcription"]["session_id"])
+                if "created_at" in doc["transcription"] and hasattr(doc["transcription"]["created_at"], "isoformat"):
+                    doc["transcription"]["created_at"] = doc["transcription"]["created_at"].isoformat()
             translations.append(doc)
 
         logger.debug(f"Found {len(translations)} translations for session {session_id}")
